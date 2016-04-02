@@ -1,0 +1,234 @@
+
+;
+jQuery(function($){
+	'use strict';
+	
+	var IO = {
+		init: function(){
+			IO.socket = io.connect();
+			IO.bindEvents();
+		}, 
+
+		bindEvents : function() {
+			IO.socket.on('connected', IO.onConnected);
+			IO.socket.on('newGameCreated', IO.onNewGameCreated);
+			IO.socket.on('beginNewGame', IO.beginNewGame);
+		},
+		
+		onConnected : function(){
+			App.mySocketId = IO.socket.socket.sessionid;
+		},
+
+		onNewGameCreated: function(data) {
+			App.Host.gameInit(data); 
+		},	
+
+		beginNewGame : function(data){
+			App.showGameScreen();
+		},
+
+		
+
+	};
+
+	
+
+	var App = {
+
+		gameId: 0,
+		myRole: '',
+		mySocketId: '',
+
+		turn : true,
+		nTurns : 0,
+		
+		w: 0,
+		h: 0,
+
+		field: '',
+
+		init: function() {
+			App.cacheElements();
+			App.showInitScreen();
+			App.bindEvents();
+			
+
+			// инициализируем поле для игрока	
+			App.w = 10;
+			App.h = 10;
+		
+			App.field = new Array(App.h);
+			for (var i=0;i<App.h;i++) {
+    			App.field[i]=new Array(App.w);
+    			for (var j=0;j<App.w;j++) {
+        			App.field[i][j]=0;
+    			}
+			}
+			App.field[0][0] = 1;
+			App.field[App.h-1][App.w-1] = 3;
+			
+			
+			// тут создать поле
+			//FastClick.attach(document.body);	
+		},
+
+		cacheElements: function(){
+			App.$doc = $(document);
+			
+			App.$gameArea = $('#gameArea');
+			App.$introScreen = $('#intro-screen-template').html();
+			App.$joinScreen = $('#join-game-template').html();
+			App.$createScreen = $('#create-game-template').html();
+			App.$gameScreen = $('#game-template').html();
+		},
+
+		bindEvents: function() {
+			App.$doc.on('click', '#btnCreateGame', App.Host.onCreateClick);
+			App.$doc.on('click', '#btnJoinGame', App.Player.onJoinClick);
+			App.$doc.on('click', '#btnStart', App.Player.onPlayerStartClick);
+			App.$doc.on('click', '.cell', App.onClickTurn);
+			
+			//App.$doc.on('click', '#btnPlayerNextTurn', App.Player.onNextTurnClick);
+			//App.$doc.on('click', '#btnHostNextTurn', App.Host.onNextTurnClick);
+		},
+
+		showInitScreen: function() {
+			App.$gameArea.html(App.$introScreen);
+  			//App.doTextFit('.title);
+		},
+
+
+		showGameScreen: function() {
+			
+			var str = "";
+			var img = "";	
+			var cur = 0; 
+			for (var i = 0; i < App.h; i++) {
+				str = str + "<tr>";
+				for (var j = 0; j < App.w; j++) {
+					cur = App.field[i][j]
+					switch (cur) {
+						case 0:	//пусто
+							img = "imgs/blanc_green.png";
+							break;
+						case 1:	// Точка хоста
+							img = "imgs/red_dot.png";
+							break;
+						case 2:	// Стена хоста
+							img = "imgs/red_fill.png";
+							break;
+						case 3:	// Точка книента
+							img = "imgs/blue_dot.png";
+							break;
+						case 4: 	// Стена клиента
+							img = "imgs/blue_fill.png";
+							break;
+						default:
+							img = "imgs/blanc_green.png";
+							break;
+					}
+	
+					str = str + "<td > " +
+						"<img id = " + i + "_" + j + " class = cell  src='"+ img +
+						"'></td>"
+				}
+		 
+				str = str + "</tr>"
+		 		
+			}
+
+			App.$gameArea.html("<table id='board'>" + str + "</table>");
+			
+		},
+
+		
+		onClickTurn: function() {
+			
+			if(App.turn){
+				console.log("Good turn");
+				// Проверить на валидность
+				var cell = $(this).attr('id').split("_");
+				var i = cell[0];
+				var j = cell[1];
+				
+				if(App.myRole == 'Host')
+					App.Host.onClickTurnHost(i,j);
+				else
+					App.Player.onClickTurnPlayer(i,j);
+				
+			}else{
+				console.log("You cannot turn");
+			}
+		},
+		
+		
+
+		Host : {
+			
+			onCreateClick: function() {
+				IO.socket.emit('hostCreateNewGame');
+			},
+
+			gameInit: function(data) {
+				App.gameId = data.gameId;
+				App.mySocketId = data.mySocketId;
+				App.myRole = 'Host';
+				App.Host.displayNewGameScreen();
+			},
+			
+			displayNewGameScreen : function() {
+				App.$gameArea.html(App.$createScreen);
+				$('#spanNewGameCode').text(App.gameId);
+			},
+
+			gameScreen : function(str) {
+				//App.$gameArea.html('<div class="joinGameWrapper">' + App.$gameScreen + "<button id='btnHostNextTurn' class='btn'> Make Turn </button> </div>" );
+				
+			},
+
+			onClickTurnHost: function(i,j) {
+				// 0 - empty, 1 - red_dot, 2 - red_wall, 3 - blue_dot, 4 - blue_wall				
+				console.log("Turn Host");
+				if(App.field[i][j] == 2 || App.field[i][j] == r){
+					console.log("Here is wall");
+					return;
+				} else {
+					// Ставить можно. Проверить есть ли вокруг живые клетки
+
+				}	
+
+				
+			}
+
+		},
+
+		Player : {
+			hostSocketId: '',
+			
+			onJoinClick: function() {
+				App.$gameArea.html(App.$joinScreen);
+			},
+
+			onPlayerStartClick: function() {
+				//App.$gameArea.html(App.$gameScreen);
+				var data = {
+					gameId : ($('#inputGameId').val())
+				};
+				App.myRole = 'Player';
+				App.turn = false;
+				IO.socket.emit('playerJoinGame', data);			
+			},
+			onClickTurnPlayer: function (i,j){
+				console.log("Turn Player");
+			}
+			
+		}
+
+
+
+	};
+
+	
+	IO.init();
+    	App.init();
+}($));
